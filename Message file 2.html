@@ -1,0 +1,275 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Crunchtude</title>
+
+<style>
+body{margin:0;background:#0b0b0b;color:#fff;font-family:Arial}
+header{padding:10px;background:#141414;display:flex;align-items:center;gap:10px}
+header img{width:32px;height:32px;border-radius:50%}
+
+.page{display:none;padding-bottom:90px}
+.page.active{display:block}
+
+video{width:100%;background:black}
+button{background:#222;border:none;color:white;padding:6px 10px;border-radius:6px}
+
+.card{display:flex;gap:10px;margin:10px;background:#141414;padding:8px;border-radius:8px}
+.card img{width:130px;border-radius:6px}
+
+.folder{margin:10px;padding:10px;background:#1c1c1c;border-radius:8px;font-weight:bold}
+
+.actions{display:flex;gap:10px;padding:10px}
+
+.comment{background:#141414;margin:8px;padding:8px;border-radius:6px}
+.small{font-size:12px;color:#aaa}
+
+input{width:95%;padding:6px;margin:8px;background:#222;border:none;color:white}
+
+nav{
+ position:fixed;bottom:0;width:100%;
+ background:#141414;display:flex;justify-content:space-around;padding:10px
+}
+nav button{background:none;border:none;color:white}
+
+.profileBox{text-align:center;padding:20px}
+.profileBox img{width:90px;height:90px;border-radius:50%}
+</style>
+</head>
+
+<body>
+
+<header>
+ <img id="hImg">
+ <span id="hName"></span>
+</header>
+
+<!-- HOME (ONLINE VIDEOS) -->
+<div id="home" class="page active">
+ <h3 style="margin-left:10px">Online Videos</h3>
+ <div id="list"></div>
+</div>
+
+<!-- DEVICE VIDEOS -->
+<div id="device" class="page">
+ <h3 style="margin-left:10px">
+  Device Videos
+  <button onclick="pickVideos()">📁 Add</button>
+ </h3>
+ <div id="deviceList"></div>
+</div>
+
+<!-- WATCHLIST -->
+<div id="watch" class="page">
+ <h3 style="margin-left:10px">❤️ Watchlist</h3>
+ <div id="watchList"></div>
+</div>
+
+<!-- PLAYER -->
+<div id="player" class="page">
+ <video id="video" controls></video>
+
+ <div class="actions">
+  <button onclick="like()">👍 <span id="likes">0</span></button>
+  <button onclick="dislike()">👎 <span id="dislikes">0</span></button>
+  <button onclick="toggleWatch()">❤️ Watchlist</button>
+ </div>
+
+ <input id="cInput" placeholder="Add a comment...">
+ <button onclick="addComment()">Comment</button>
+ <div id="comments"></div>
+</div>
+
+<!-- PROFILE -->
+<div id="profile" class="page">
+ <div class="profileBox">
+  <img id="pImg">
+  <input type="file" accept="image/*" onchange="changePic(event)">
+  <input id="pName" placeholder="Your name">
+  <button onclick="saveProfile()">Save</button>
+ </div>
+</div>
+
+<nav>
+ <button onclick="show('home')">Home</button>
+ <button onclick="show('device')">Device</button>
+ <button onclick="show('watch')">Watchlist</button>
+ <button onclick="show('player')">Player</button>
+ <button onclick="show('profile')">Profile</button>
+</nav>
+
+<input type="file" id="filePicker" accept="video/*" multiple style="display:none">
+
+<script>
+/* ---------- STORAGE ---------- */
+const get=k=>JSON.parse(localStorage.getItem(k)||"{}");
+const set=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
+
+/* ---------- PROFILE ---------- */
+let profile=get("profile");
+if(!profile.name){
+ profile={name:"Guest",img:"https://i.imgur.com/6VBx3io.png"};
+ set("profile",profile);
+}
+hName.innerText=profile.name;
+hImg.src=pImg.src=profile.img;
+pName.value=profile.name;
+
+function saveProfile(){
+ profile.name=pName.value||"Guest";
+ set("profile",profile);
+ hName.innerText=profile.name;
+}
+function changePic(e){
+ let r=new FileReader();
+ r.onload=()=>{
+  profile.img=r.result;
+  set("profile",profile);
+  hImg.src=pImg.src=profile.img;
+ };
+ r.readAsDataURL(e.target.files[0]);
+}
+
+/* ---------- ONLINE VIDEOS ---------- */
+let videos=[
+ {id:1,t:"Big Buck Bunny",u:"https://www.w3schools.com/html/mov_bbb.mp4",i:"https://peach.blender.org/wp-content/uploads/title_anouncement.jpg"},
+ {id:2,t:"Bear Video",u:"https://www.w3schools.com/html/movie.mp4",i:"https://i.imgur.com/ZXBtVw7.jpg"}
+];
+
+/* ---------- DEVICE VIDEOS (IndexedDB) ---------- */
+let deviceVideos=get("deviceVideos");
+const picker=document.getElementById("filePicker");
+
+function pickVideos(){picker.click()}
+
+picker.onchange=()=>{
+ [...picker.files].forEach(f=>{
+  deviceVideos.push({
+   id:Date.now()+Math.random(),
+   name:f.name,
+   folder:(f.webkitRelativePath.split("/")[0]||"Videos"),
+   url:URL.createObjectURL(f)
+  });
+ });
+ set("deviceVideos",deviceVideos);
+ renderDevice();
+};
+
+/* ---------- NAV ---------- */
+function show(p){
+ document.querySelectorAll(".page").forEach(x=>x.classList.remove("active"));
+ document.getElementById(p).classList.add("active");
+ if(p==="watch")renderWatch();
+}
+
+/* ---------- HOME ---------- */
+function renderHome(){
+ list.innerHTML=videos.map((v,i)=>`
+  <div class="card" onclick="playOnline(${i})">
+   <img src="${v.i}">
+   <div>${v.t}</div>
+  </div>`).join("");
+}
+
+/* ---------- DEVICE (FOLDERS) ---------- */
+function renderDevice(){
+ let groups={};
+ deviceVideos.forEach(v=>{
+  groups[v.folder]=groups[v.folder]||[];
+  groups[v.folder].push(v);
+ });
+ deviceList.innerHTML=Object.keys(groups).map(f=>`
+  <div class="folder">📂 ${f}</div>
+  ${groups[f].map(v=>`
+   <div class="card" onclick="playDevice('${v.id}')">
+    <img src="https://i.imgur.com/9Q9ZQZy.png">
+    <div>${v.name}</div>
+   </div>`).join("")}
+ `).join("") || "<p style='margin:10px'>No device videos</p>";
+}
+
+/* ---------- PLAY ---------- */
+let cur=null;
+function playOnline(i){
+ cur=videos[i];
+ video.src=cur.u;
+ startPlay();
+}
+function playDevice(id){
+ cur=deviceVideos.find(v=>v.id==id);
+ video.src=cur.url;
+ startPlay();
+}
+function startPlay(){
+ video.play();
+ loadStats();loadComments();
+ show("player");
+}
+
+/* ---------- LIKE ---------- */
+function loadStats(){
+ let s=get("stats")[cur.id]||{l:0,d:0};
+ likes.innerText=s.l;dislikes.innerText=s.d;
+}
+function like(){
+ let a=get("stats");
+ let s=a[cur.id]||{l:0,d:0};
+ s.l++;a[cur.id]=s;set("stats",a);loadStats();
+}
+function dislike(){
+ let a=get("stats");
+ let s=a[cur.id]||{l:0,d:0};
+ s.d++;a[cur.id]=s;set("stats",a);loadStats();
+}
+
+/* ---------- WATCHLIST ---------- */
+function toggleWatch(){
+ let w=get("watch");
+ w[cur.id]=!w[cur.id];
+ set("watch",w);
+}
+function renderWatch(){
+ let w=get("watch");
+ watchList.innerHTML=[...videos,...deviceVideos].filter(v=>w[v.id]).map(v=>`
+  <div class="card" onclick="${v.u?'playOnline':'playDevice'}('${v.id}')">
+   <img src="https://i.imgur.com/9Q9ZQZy.png">
+   <div>${v.t||v.name}</div>
+  </div>`).join("") || "<p style='margin:10px'>Empty</p>";
+}
+
+/* ---------- COMMENTS ---------- */
+function loadComments(){
+ let c=get("comments")[cur.id]||[];
+ comments.innerHTML=c.map((x,i)=>`
+  <div class="comment">
+   <b>${x.n}</b>: ${x.t}
+   <div class="small">
+    ❤️ ${x.l}
+    <button onclick="likeComment(${i})">Like</button>
+    <button onclick="delComment(${i})">Delete</button>
+   </div>
+  </div>`).join("");
+}
+function addComment(){
+ let txt=cInput.value.trim();if(!txt)return;
+ let all=get("comments");
+ let c=all[cur.id]||[];
+ c.push({t:txt,l:0,n:profile.name});
+ all[cur.id]=c;set("comments",all);
+ cInput.value="";loadComments();
+}
+function likeComment(i){
+ let a=get("comments");a[cur.id][i].l++;set("comments",a);loadComments();
+}
+function delComment(i){
+ let a=get("comments");a[cur.id].splice(i,1);set("comments",a);loadComments();
+}
+
+/* ---------- INIT ---------- */
+renderHome();
+renderDevice();
+</script>
+
+</body>
+</html>
